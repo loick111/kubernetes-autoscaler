@@ -61,31 +61,47 @@ dev-release: dev-release-arch-$(GOARCH)
 dev-release-arch-%: build-arch-% make-image-arch-% push-image-arch-%
 	@echo "Release ${TAG}${FOR_PROVIDER}-$* completed"
 
+dev-release-multiarch: $(addprefix build-arch-,$(ALL_ARCH)) make-image-multiarch push-image-multiarch
+	@echo "Release ${TAG}${FOR_PROVIDER} completed"
+
 make-image: make-image-arch-$(GOARCH)
 
 make-image-arch-%:
 ifdef BASEIMAGE
-	docker build --pull --build-arg BASEIMAGE=${BASEIMAGE} \
+	docker build --pull --build-arg TARGETARCH=$* --build-arg BASEIMAGE=${BASEIMAGE} \
 		-t ${IMAGE}-$*:${TAG} \
-		-f Dockerfile.$* .
+		.
 else
-	docker build --pull \
-		-t ${IMAGE}-$*:${TAG} \
-		-f Dockerfile.$* .
+	docker build --pull --build-arg TARGETARCH=$* \
+		-t ${IMAGE}:${TAG} \
+		.
 endif
-	@echo "Image ${TAG}${FOR_PROVIDER}-$* completed"
+
+make-image-multiarch:
+ifdef BASEIMAGE
+BUILDX_ARGS = --build-arg BASEIMAGE=${BASEIMAGE}
+endif
+
+	docker buildx build --platform $(subst $(space),$(comma),$(addprefix linux/,${ALL_ARCH})) \
+		-t ${IMAGE}:${TAG} \
+		${BUILDX_ARGS} .
+
 
 push-image: push-image-arch-$(GOARCH)
 
 push-image-arch-%:
 	./push_image.sh ${IMAGE}-$*:${TAG}
 
-push-manifest:
-	docker manifest create ${IMAGE}:${TAG} \
-	    $(addprefix $(REGISTRY)/cluster-autoscaler$(PROVIDER)-, $(addsuffix :$(TAG), $(ALL_ARCH)))
-	docker manifest push --purge ${IMAGE}:${TAG}
+push-image-multiarch:
+ifdef BASEIMAGE
+BUILDX_ARGS = --build-arg BASEIMAGE=${BASEIMAGE}
+endif
 
-execute-release: $(addprefix make-image-arch-,$(ALL_ARCH)) $(addprefix push-image-arch-,$(ALL_ARCH)) push-manifest
+	docker buildx build --push --platform $(subst $(space),$(comma),$(addprefix linux/,${ALL_ARCH})) \
+		-t ${IMAGE}:${TAG} \
+		${BUILDX_ARGS} .
+
+execute-release: make-image-multiarch push-image-multiarch
 	@echo "Release ${TAG}${FOR_PROVIDER} completed"
 
 clean: clean-arch-$(GOARCH)

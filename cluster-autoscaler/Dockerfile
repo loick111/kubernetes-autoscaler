@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-ARG BASEIMAGE=gcr.io/distroless/static:nonroot-amd64
+ARG BASEIMAGE=gcr.io/distroless/static:nonroot
 FROM $BASEIMAGE
 
-COPY cluster-autoscaler-amd64 /cluster-autoscaler
-WORKDIR /
-CMD ["/cluster-autoscaler"]
+ARG TARGETARCH
+COPY cluster-autoscaler-${TARGETARCH} /usr/local/bin/cluster-autoscaler
+
+CMD ["cluster-autoscaler"]
